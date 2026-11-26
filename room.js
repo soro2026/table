@@ -75,16 +75,47 @@
     `<div class="mini"><span class="empty"><span class="q">?</span></span><span>${no}번<br>${span(no)}</span></div>`).join('');
 
   // 카카오로 입장 — 시연판은 확인 없이 문 안으로 걸어 들어간다
-  document.querySelector('.kakao').addEventListener('click', () => {
+  // 들어가면 주소 끝에 #room을 달아, 폰의 뒤로 가기가 「전시실 → 문 앞」이 되게 한다
+  let inRoom = false;
+  const walkIn = () => {
+    if (inRoom) return; inRoom = true;
+    scene.classList.remove('bye', 'dim', 'back');
     scene.classList.add('leave');
     setTimeout(() => {
       document.body.classList.add('inroom');
-      room.hidden = false;
+      room.hidden = false; room.classList.remove('going');
       window.scrollTo(0, 0);
       ready.then(() => document.querySelectorAll('.wall .plate').forEach(fitPlate));
       loadVision().catch(() => {});
     }, 820);
-  });
+  };
+
+  // 다음 그림이 오는 날 — 배웅 인사에 넣는다
+  const nextComing = () => {
+    const d = now.getDate();
+    if (d <= 20) { const n = Math.floor((d - 1) / 5) + 2; return `${n}번 그림은 ${M}월 ${span(n)}에 와요.`; }
+    return `6번 그림은 ${next}월 1~5일에 와요.`;
+  };
+  let dimT;
+  const walkOut = () => {
+    if (!inRoom) return; inRoom = false;
+    [document.getElementById('zoom'), document.getElementById('guide'), document.getElementById('look')].forEach(el => { if (el) el.hidden = true; });
+    document.body.style.overflow = '';
+    room.classList.add('going');
+    setTimeout(() => {
+      room.hidden = true; document.body.classList.remove('inroom');
+      document.getElementById('byeNext').textContent = nextComing();
+      scene.classList.remove('leave'); scene.classList.add('bye', 'back');
+      window.scrollTo(0, 0); placeGlow();
+      clearTimeout(dimT); dimT = setTimeout(() => scene.classList.add('dim'), 4200);   // 다 읽을 즈음 불이 천천히 꺼진다
+    }, 450);
+  };
+  const toRoom = () => { if (location.hash === '#room') walkIn(); else location.hash = 'room'; };
+  addEventListener('hashchange', () => { if (location.hash === '#room') walkIn(); else walkOut(); });
+  if (location.hash === '#room') history.replaceState(null, '', location.pathname + location.search);   // 새로고침은 늘 문 앞에서
+  document.querySelector('.kakao').addEventListener('click', toRoom);
+  document.getElementById('again').addEventListener('click', () => { clearTimeout(dimT); toRoom(); });
+  document.getElementById('exitBtn').addEventListener('click', () => { if (location.hash === '#room') history.back(); else walkOut(); });
 
   /* ── 가까이 보기 — 액자 속 그림으로 빨려 들어가듯 ── */
   const zoom = document.getElementById('zoom');
