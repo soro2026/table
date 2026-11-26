@@ -99,6 +99,7 @@
   let dimT;
   const walkOut = () => {
     if (!inRoom) return; inRoom = false;
+    dropZoom();
     [document.getElementById('zoom'), document.getElementById('guide'), document.getElementById('look')].forEach(el => { if (el) el.hidden = true; });
     document.body.style.overflow = '';
     room.classList.add('going');
@@ -117,14 +118,76 @@
   document.getElementById('again').addEventListener('click', () => { clearTimeout(dimT); toRoom(); });
   document.getElementById('exitBtn').addEventListener('click', () => { if (location.hash === '#room') history.back(); else walkOut(); });
 
-  /* ── 가까이 보기 — 액자 속 그림으로 빨려 들어가듯 ── */
+  /* ── 화면 4 · 가까이 보기 — 액자 속 그림으로 빨려 들어가고, 아래로 도슨트가 선다 ── */
   const zoom = document.getElementById('zoom');
   const bg = zoom.querySelector('.zoom-bg');
   const art = zoom.querySelector('.zoom-art');
   const zplate = zoom.querySelector('.zoom-plate');
   const cap = zoom.querySelector('.zoom-cap');
+  const docent = document.getElementById('docent');
+  const sceneLine = document.getElementById('sceneLine');
+  const layersEl = document.getElementById('layers');
   const ease = 'cubic-bezier(.22,.7,.12,1)';
   let cur = null;
+
+  // 해설 글의 *기울임* · **굵게** 표시를 화면 글씨로 — 한글은 기울이면 어색해서 결(색 · 무게)로만 바꾼다
+  const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
+  const LAYERS = [['knowledge', '이 그림은'], ['thought', '곰곰이'], ['connection', '이어지는 이야기'], ['curation', '다음에 만나면']];
+
+  // 음성 해설 — 폰은 저절로 소리 내지 않으니 손님이 단추를 눌러야 시작. 미리 받지도 않는다(preload none)
+  const voice = document.getElementById('voice');
+  const listen = document.getElementById('listen'), listenT = document.getElementById('listenT');
+  const listenM = document.getElementById('listenM'), listenBar = document.getElementById('listenBar');
+  const clock = s => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const longTime = s => { s = Math.floor(s || 0); const m = Math.floor(s / 60), r = s % 60; return m ? (r ? `${m}분 ${r}초` : `${m}분`) : `${r}초`; };
+  let vWork = null, vSec = 0;
+  const WORDS = { idle: '음성 해설 듣기', wait: '불러오는 중…', play: '잠시 멈춤', pause: '이어 듣기', end: '다시 듣기', err: '지금은 들을 수 없어요' };
+  const paintVoice = st => {
+    if (st) listen.dataset.st = st;
+    st = listen.dataset.st;
+    const t = voice.currentTime || 0, dur = (isFinite(voice.duration) && voice.duration) || vSec;
+    listenT.textContent = WORDS[st];
+    listenM.textContent = st === 'idle' || st === 'end' ? longTime(vSec) : st === 'play' || st === 'pause' ? `${clock(t)} / ${clock(dur)}` : '';
+    listenBar.style.width = (st === 'idle' ? 0 : st === 'end' ? 100 : dur ? Math.min(100, t / dur * 100) : 0) + '%';
+  };
+  const setVoice = (w, v) => {
+    listen.hidden = !v;
+    if (!v) return;
+    if (vWork !== w.id) {   // 다른 그림이면 처음부터 · 같은 그림을 다시 열면 멈춘 데서 이어 듣는다
+      voice.pause(); voice.src = v.src; vWork = w.id; vSec = v.sec;
+      paintVoice('idle');
+    } else paintVoice();
+  };
+  const mediaMeta = w => {
+    try {
+      if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({
+        title: w.name, artist: D.exhibit.artist, album: `${D.shop.name} 식탁미술관`,
+        artwork: [{ src: new URL(D.art[w.id].full, location.href).href, type: 'image/webp' }] });
+    } catch (e) {}
+  };
+  listen.addEventListener('click', () => {
+    const st = listen.dataset.st;
+    if (st === 'play' || st === 'wait') { voice.pause(); return; }
+    if (st === 'end') voice.currentTime = 0;
+    if (st === 'err') voice.load();
+    paintVoice('wait');
+    if (cur) mediaMeta(cur.w);
+    const p = voice.play();
+    if (p) p.catch(() => { if (!voice.error) paintVoice(voice.currentTime > 0 ? 'pause' : 'idle'); });
+  });
+  voice.addEventListener('playing', () => paintVoice('play'));
+  voice.addEventListener('waiting', () => { if (!voice.paused) paintVoice('wait'); });
+  voice.addEventListener('pause', () => { if (!voice.ended && listen.dataset.st !== 'err') paintVoice(voice.currentTime > 0 ? 'pause' : 'idle'); });
+  voice.addEventListener('ended', () => paintVoice('end'));
+  voice.addEventListener('timeupdate', () => { if (listen.dataset.st === 'play') paintVoice(); });
+  voice.addEventListener('error', () => { if (voice.getAttribute('src')) paintVoice('err'); });
+
+  const fillDocent = w => {
+    const d = (D.docent || {})[w.id] || {}, L = d.layers || {};
+    sceneLine.innerHTML = L.scene ? md(L.scene) : ''; sceneLine.hidden = !L.scene;
+    layersEl.innerHTML = LAYERS.filter(([k]) => L[k]).map(([k, t]) => `<section class="layer"><h3>${t}</h3><p>${md(L[k])}</p></section>`).join('');
+    setVoice(w, d.voice);
+  };
 
   const startRects = (btn, w) => {
     const f = D.frames[w.id], r = btn.querySelector('.framed').getBoundingClientRect();
@@ -147,16 +210,19 @@
   };
 
   const open = async btn => {
-    const w = work(+btn.dataset.no); if (!w) return;
+    const w = work(+btn.dataset.no); if (!w || cur) return;
     const f = D.frames[w.id];
     cur = { btn, w };
     art.src = D.art[w.id].full; art.alt = `${w.name} · ${D.exhibit.artist}, ${w.year}`;
     zplate.style.aspectRatio = f.plate_ratio; zplate.style.backgroundImage = `url("${D.art[w.id].plate}")`;
     zplate.innerHTML = plateHTML(w);
     cap.textContent = `${w.name} · ${D.exhibit.artist}, ${w.year} · ${w.museum}`;
+    fillDocent(w);
     try { await art.decode(); } catch (e) {}
     const S = startRects(btn, w);
-    zoom.hidden = false; document.body.style.overflow = 'hidden';
+    zoom.hidden = false; zoom.scrollTop = 0; document.body.style.overflow = 'hidden';
+    // 폰의 뒤로 가기 = 벽으로(전시실 밖으로 나가지 않게)
+    try { history.pushState({ look: 1 }, '', location.href); } catch (e) {}
     fitPlate(zplate);
     const F = art.getBoundingClientRect(), P = zplate.getBoundingClientRect();
     const framed = btn.querySelector('.framed'), sw = swallow(S, S.framed);
@@ -167,14 +233,27 @@
     art.animate([artFrom(S.paint, F), { transform: 'none', clipPath: `inset(0px 0px)` }], opt);
     zplate.animate([plateFrom(S.plate, P), { transform: 'none' }], opt);
     cap.animate([{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], { duration: 900, fill: 'both' });
+    docent.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 0, transform: 'translateY(12px)', offset: .55 }, { opacity: 1, transform: 'none' }], { duration: 1200, easing: 'ease', fill: 'both' });
     zoom.querySelector('.zoom-x').focus({ preventScroll: true });
   };
 
+  const settle = (btn, framed) => {
+    zoom.hidden = true; document.body.style.overflow = '';
+    [zoom, art, zplate, bg, cap, docent, framed].forEach(el => el && el.getAnimations().forEach(x => x.cancel()));
+    if (btn) btn.focus({ preventScroll: true });
+  };
   const close = () => {
     if (!cur) return;
     const { btn, w } = cur; cur = null;
+    voice.pause();   // 멈춘 자리는 기억 — 같은 그림을 다시 열면 「이어 듣기」
     const framed = btn.querySelector('.framed');
     framed.getAnimations().forEach(a => a.cancel());
+    // 해설을 읽으러 아래로 내려와 있었다면 — 그림이 날아오지 않고 스르르 걷히며 벽의 액자가 다시 선다
+    if (zoom.scrollTop > 60) {
+      framed.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 480, easing: 'ease', fill: 'both' });
+      zoom.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 340, easing: 'ease', fill: 'both' }).finished.then(() => settle(btn, framed));
+      return;
+    }
     const S = startRects(btn, w);
     const F = art.getBoundingClientRect(), P = zplate.getBoundingClientRect(), sw = swallow(S, S.framed);
     framed.style.transformOrigin = sw.origin;
@@ -182,21 +261,28 @@
     framed.animate([{ transform: `scale(${sw.grow})`, opacity: 0 }, { transform: 'none', opacity: 1 }], opt);
     bg.animate([{ opacity: 1 }, { opacity: 0 }], opt);
     cap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'both' });
+    docent.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'both' });
     zplate.animate([{ transform: 'none' }, plateFrom(S.plate, P)], opt);
-    const a = art.animate([{ transform: 'none', clipPath: 'inset(0px 0px)' }, artFrom(S.paint, F)], opt);
-    a.finished.then(() => {
-      zoom.hidden = true; document.body.style.overflow = '';
-      [art, zplate, bg, cap, framed].forEach(el => el.getAnimations().forEach(x => x.cancel()));
-      btn.focus({ preventScroll: true });
-    });
+    art.animate([{ transform: 'none', clipPath: 'inset(0px 0px)' }, artFrom(S.paint, F)], opt).finished.then(() => settle(btn, framed));
+  };
+  // ✕ · 「벽으로 돌아가기」 · Esc는 뒤로 가기와 같은 길 — 쌓아 둔 한 칸을 걷으면서 닫는다
+  const askClose = () => { if (!cur) return; if (history.state && history.state.look) history.back(); else close(); };
+  addEventListener('popstate', () => { if (cur && !(history.state && history.state.look)) close(); });
+  // 전시실을 나갈 때 가까이 보기가 열려 있었다면 조용히 거둔다(벽의 액자가 투명한 채 남지 않게)
+  const dropZoom = () => {
+    voice.pause();
+    if (!cur) return;
+    const framed = cur.btn.querySelector('.framed'); cur = null;
+    settle(null, framed);
   };
 
   wallEl.addEventListener('click', e => {
     const b = e.target.closest('button.slot'); if (!b) return;
     if (b.classList.contains('lit')) open(b); else openGuide();
   });
-  zoom.addEventListener('click', close);
-  addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  zoom.querySelector('.zoom-x').addEventListener('click', askClose);
+  document.getElementById('backWall').addEventListener('click', askClose);
+  addEventListener('keydown', e => { if (e.key === 'Escape') askClose(); });
 
   /* ── 화면 3 · 도장(시연판은 엽서만) ── */
   let visionP = null;

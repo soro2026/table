@@ -147,17 +147,51 @@ button.slot:focus-visible{outline:2px solid var(--l2);outline-offset:6px;border-
 .mini{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;line-height:1.3;color:rgba(244,236,220,.7)}
 .mini .empty{width:100%}
 
-/* ── 가까이 보기 — 액자 속으로 빨려 들어가듯 ───────────────── */
-.zoom{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
-  padding:calc(56px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))}
+/* ── 화면 4 · 가까이 보기 — 액자 속으로 빨려 들어가고, 아래로 도슨트 ───── */
+.zoom{position:fixed;inset:0;z-index:20;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .zoom[hidden]{display:none}
-.zoom-bg{position:absolute;inset:0;background:rgba(6,8,12,.96)}
-.zoom-art{position:relative;display:block;max-width:100%;max-height:62svh;width:auto;height:auto;box-shadow:0 18px 50px rgba(0,0,0,.6);will-change:transform,clip-path}
+.zoom-bg{position:fixed;inset:0;background:rgba(6,8,12,.985)}
+.zoom-in{position:relative;min-height:100%;display:flex;flex-direction:column;align-items:center;gap:18px;
+  padding:calc(64px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom))}
+.zoom-in>:first-child{margin-top:auto}
+.zoom-in>:last-child{margin-bottom:auto}
+.zoom-art{position:relative;display:block;max-width:100%;max-height:58svh;width:auto;height:auto;box-shadow:0 18px 50px rgba(0,0,0,.6);will-change:transform,clip-path}
 .zoom-plate{position:relative;width:min(92vw,460px);background-size:100% 100%;will-change:transform}
 .zoom-cap{position:relative;margin:0;font-size:14px;line-height:1.5;text-align:center;color:rgba(241,232,212,.7)}
-.zoom-x{position:absolute;z-index:1;top:calc(12px + env(safe-area-inset-top));right:12px;width:44px;height:44px;border:0;border-radius:50%;
-  background:rgba(255,255,255,.08);color:#f1e8d4;font-size:20px;line-height:1;cursor:pointer}
+.zoom-x{position:fixed;z-index:3;top:calc(12px + env(safe-area-inset-top));right:12px;width:44px;height:44px;border:0;border-radius:50%;
+  background:rgba(40,44,52,.72);color:#f1e8d4;font-size:20px;line-height:1;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .zoom-x:focus-visible{outline:2px solid var(--l2)}
+
+/* 도슨트 — 한 줄 장면 · 음성 해설 · 네 겹 */
+.docent{position:relative;width:min(100%,440px);display:flex;flex-direction:column;align-items:center;color:#f1e8d4}
+.scene-line{margin:4px 0 0;padding:0 6px;font:500 19px/1.6 "Noto Serif KR","Noto Serif CJK KR",serif;text-align:center;color:#f6eedb;word-break:keep-all;text-wrap:balance}
+.scene-line[hidden]{display:none}
+.listen{position:relative;display:inline-flex;align-items:center;gap:10px;margin-top:20px;min-height:52px;padding:0 24px 0 18px;border-radius:26px;overflow:hidden;
+  border:1px solid color-mix(in srgb,var(--l2) 55%,transparent);background:color-mix(in srgb,var(--l2) 12%,transparent);color:#f6eedb;
+  font:500 16px/1 "Noto Sans KR","Noto Sans CJK KR",sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.listen[hidden]{display:none}
+.listen svg{width:20px;height:20px;flex:none;color:var(--l2)}
+.listen .i-pause,.listen[data-st=play] .i-play,.listen[data-st=wait] .i-play{display:none}
+.listen[data-st=play] .i-pause,.listen[data-st=wait] .i-pause{display:block}
+.listen[data-st=wait] svg{animation:breathe 1.2s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.35}}
+.listen-m{font-size:14px;font-variant-numeric:tabular-nums;color:rgba(241,232,212,.62)}
+.listen-m:empty{display:none}
+.listen-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(241,232,212,.08)}
+.listen-bar i{display:block;width:0;height:100%;background:var(--l2);transition:width .3s linear}
+.listen[data-st=err]{opacity:.72}
+.listen:focus-visible{outline:2px solid var(--l2);outline-offset:3px}
+.layers{width:100%;margin-top:30px}
+.layers:empty{display:none}
+.layer{padding:22px 4px;border-top:1px solid rgba(241,232,212,.12)}
+.layer h3{margin:0 0 10px;font:500 12px/1 "Noto Sans KR","Noto Sans CJK KR",sans-serif;letter-spacing:.24em;color:var(--l2)}
+.layer p{margin:0;font-size:16px;line-height:1.85;color:rgba(241,232,212,.86);word-break:keep-all}
+.layer em{font-style:normal;color:var(--l1)}
+.layer strong{font-weight:500;color:#fff8e6}
+.back-wall{margin-top:14px;min-height:48px;padding:0 22px;border-radius:24px;border:1px solid rgba(241,232,212,.3);background:none;color:rgba(241,232,212,.85);
+  font:500 15px/1 "Noto Sans KR","Noto Sans CJK KR",sans-serif;cursor:pointer}
+.layers:empty+.back-wall{display:none}
+@media (prefers-reduced-motion:reduce){.listen[data-st=wait] svg{animation:none}}
 
 /* ── 화면 3 · 받은 엽서 찍기 ───────────────────────────── */
 .snap{position:sticky;bottom:calc(16px + env(safe-area-inset-bottom));z-index:5;margin-top:30px;text-align:center;pointer-events:none}
