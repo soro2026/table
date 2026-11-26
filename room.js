@@ -100,7 +100,7 @@
   const walkOut = () => {
     if (!inRoom) return; inRoom = false;
     dropZoom();
-    [document.getElementById('zoom'), document.getElementById('guide'), document.getElementById('look')].forEach(el => { if (el) el.hidden = true; });
+    [document.getElementById('zoom'), document.getElementById('guide'), document.getElementById('look'), document.getElementById('hq')].forEach(el => { if (el) el.hidden = true; });
     document.body.style.overflow = '';
     room.classList.add('going');
     setTimeout(() => {
@@ -492,4 +492,13 @@
     guide.hidden = true; onPhoto(f);
   });
   document.getElementById('lookBack').addEventListener('click', closeLook);
+
+  /* ── 본사 대시보드 — 시연판은 단추와 한 줄 안내만(숫자판은 계약 뒤 귀사 전용으로) ── */
+  const hq = document.getElementById('hq');
+  const closeHq = () => { hq.hidden = true; document.body.style.overflow = ''; };
+  document.getElementById('hqBtn').addEventListener('click', () => { hq.hidden = false; document.body.style.overflow = 'hidden'; document.getElementById('hqOk').focus({ preventScroll: true }); });
+  document.getElementById('hqX').addEventListener('click', closeHq);
+  document.getElementById('hqOk').addEventListener('click', closeHq);
+  hq.addEventListener('click', e => { if (e.target === hq) closeHq(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !hq.hidden) closeHq(); });
 }
