@@ -193,6 +193,23 @@ button.slot:focus-visible{outline:2px solid var(--l2);outline-offset:6px;border-
 .layers:empty+.back-wall{display:none}
 @media (prefers-reduced-motion:reduce){.listen[data-st=wait] svg{animation:none}}
 
+/* 원화 크게 보기 — 화면 가득 · 벌리고 끌고 톡톡 */
+.zoom-art{cursor:zoom-in;-webkit-tap-highlight-color:transparent}
+.deep{position:fixed;inset:0;z-index:24;overflow:hidden;background:#05070a;touch-action:none;cursor:zoom-in;
+  -webkit-user-select:none;user-select:none;animation:deepin .25s ease both}
+.deep[hidden]{display:none}
+.deep.drag{cursor:grabbing}
+@keyframes deepin{from{opacity:0}}
+.deep-img{position:absolute;left:0;top:0;max-width:none;transform-origin:0 0;will-change:transform;pointer-events:none;-webkit-user-drag:none}
+.deep-img.glide{transition:transform .28s cubic-bezier(.2,.7,.2,1)}
+.deep-x{position:absolute;z-index:2;top:calc(12px + env(safe-area-inset-top));right:12px;width:44px;height:44px;border:0;border-radius:50%;
+  background:rgba(40,44,52,.72);color:#f1e8d4;font-size:20px;line-height:1;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.deep-x:focus-visible{outline:2px solid var(--l2)}
+.deep-hint{position:absolute;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));translate:-50% 0;margin:0;padding:9px 16px;border-radius:18px;
+  background:rgba(20,24,32,.84);color:rgba(241,232,212,.92);font-size:14px;white-space:nowrap;pointer-events:none;transition:opacity .7s ease}
+.deep-hint.off{opacity:0}
+@media (prefers-reduced-motion:reduce){.deep{animation:none}.deep-img.glide{transition:none}}
+
 /* ── 화면 3 · 받은 엽서 찍기 ───────────────────────────── */
 .snap{position:sticky;bottom:calc(16px + env(safe-area-inset-bottom));z-index:5;margin-top:30px;text-align:center;pointer-events:none}
 .snap .snap-btn{pointer-events:auto}

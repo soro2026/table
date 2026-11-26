@@ -270,11 +270,114 @@
   addEventListener('popstate', () => { if (cur && !(history.state && history.state.look)) close(); });
   // 전시실을 나갈 때 가까이 보기가 열려 있었다면 조용히 거둔다(벽의 액자가 투명한 채 남지 않게)
   const dropZoom = () => {
-    voice.pause();
+    voice.pause(); closeDeep();
     if (!cur) return;
     const framed = cur.btn.querySelector('.framed'); cur = null;
     settle(null, framed);
   };
+
+  /* ── 원화 크게 보기 — 해설 화면의 그림을 누르면 원판이 화면 가득, 벌리면 붓 자국까지 ──
+     원판은 그림 창고 zoom_src(위키미디어 공용 파일 이름). 처음엔 지금 그림을 곧바로 띄우고,
+     1920 판 → (2배 가까이 키우면) 3840 판으로 조용히 또렷해진다. 다 받은 뒤 한 번에 갈아 끼운다 */
+  const deep = document.getElementById('deep'), dimg = document.getElementById('deepImg'), deepHint = document.getElementById('deepHint');
+  const plateUrl = (f, w) => `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(f.replace(/ /g, '_'))}?width=${w}`;
+  const fetchImg = url => new Promise((ok, no) => {
+    const im = new Image(); im.decoding = 'async';
+    im.onload = () => (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(() => ok(im));
+    im.onerror = no; im.src = url;
+  });
+  const Z = { s: 1, tx: 0, ty: 0, fw: 0, fh: 0, got: 0, seq: 0, src: '' };
+  let deepOpen = false, hintT;
+  const frame = () => {
+    const vw = innerWidth, vh = innerHeight, W = Z.fw * Z.s, H = Z.fh * Z.s;
+    Z.tx = W <= vw ? (vw - W) / 2 : Math.min(0, Math.max(vw - W, Z.tx));
+    Z.ty = H <= vh ? (vh - H) / 2 : Math.min(0, Math.max(vh - H, Z.ty));
+    dimg.style.width = Z.fw + 'px'; dimg.style.height = Z.fh + 'px';
+    dimg.style.transform = `translate(${Z.tx}px,${Z.ty}px) scale(${Z.s})`;
+  };
+  const measure = () => {
+    const nw = dimg.naturalWidth || 4, nh = dimg.naturalHeight || 3, k = Math.min(innerWidth * .96 / nw, innerHeight * .86 / nh);
+    Z.fw = nw * k; Z.fh = nh * k;
+  };
+  const fit = () => { measure(); Z.s = 1; frame(); };
+  const zmax = () => Z.got >= 2 ? Math.max(2, Math.min(6, (dimg.naturalWidth || 0) / Z.fw)) : 3;
+  const zoomAt = (k, cx, cy) => {
+    const s2 = Math.min(zmax(), Math.max(1, Z.s * k)); if (Math.abs(s2 - Z.s) < 1e-4) return;
+    Z.tx = cx - (cx - Z.tx) * (s2 / Z.s); Z.ty = cy - (cy - Z.ty) * (s2 / Z.s); Z.s = s2; frame();
+    if (Z.s > 1.6) upgrade(2, 3840);
+  };
+  const glide = () => { dimg.classList.add('glide'); setTimeout(() => dimg.classList.remove('glide'), 300); };
+  // 판을 갈아 끼워도 보던 자리 · 배율은 그대로(손님 눈에는 또렷해지기만)
+  const swap = (src, my) => new Promise(ok => {
+    const fx = (innerWidth / 2 - Z.tx) / (Z.fw * Z.s), fy = (innerHeight / 2 - Z.ty) / (Z.fh * Z.s), s = Z.s;
+    dimg.onload = () => {
+      dimg.onload = null; if (my !== Z.seq) return ok(false);
+      measure(); Z.s = s; Z.tx = innerWidth / 2 - fx * Z.fw * s; Z.ty = innerHeight / 2 - fy * Z.fh * s; frame(); ok(true);
+    };
+    dimg.src = src;
+  });
+  const asked = new Set();
+  const upgrade = (lv, w) => {
+    const key = Z.seq + ':' + lv; if (!Z.src || Z.got >= lv || asked.has(key)) return;
+    asked.add(key); const my = Z.seq;
+    fetchImg(plateUrl(Z.src, w)).then(im => (my === Z.seq && Z.got < lv) ? swap(im.src, my).then(ok => { if (ok) Z.got = Math.max(Z.got, lv); }) : 0).catch(() => {});
+  };
+  const openDeep = () => {
+    if (!cur || deepOpen) return;
+    const d = (D.docent || {})[cur.w.id] || {};
+    deepOpen = true; Z.seq++; Z.got = 0; Z.src = d.zoom || '';
+    dimg.onload = null; dimg.alt = art.alt; dimg.src = art.src;
+    deep.hidden = false; deep.classList.remove('drag');
+    if (dimg.complete && dimg.naturalWidth) fit(); else dimg.onload = () => { dimg.onload = null; fit(); };
+    deepHint.classList.remove('off'); clearTimeout(hintT); hintT = setTimeout(() => deepHint.classList.add('off'), 2600);
+    try { history.pushState({ look: 1, deep: 1 }, '', location.href); } catch (e) {}
+    upgrade(1, 1920);
+  };
+  const closeDeep = () => { if (!deepOpen) return; deepOpen = false; Z.seq++; deep.hidden = true; dimg.onload = null; dimg.removeAttribute('src'); };
+  const askCloseDeep = () => { if (!deepOpen) return; if (history.state && history.state.deep) history.back(); else closeDeep(); };
+  addEventListener('popstate', () => { if (deepOpen && !(history.state && history.state.deep)) closeDeep(); });
+  art.addEventListener('click', openDeep);
+  document.getElementById('deepX').addEventListener('click', askCloseDeep);
+  addEventListener('resize', () => { if (deepOpen) fit(); });
+  deep.addEventListener('wheel', e => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * .0018), e.clientX, e.clientY); }, { passive: false });
+  // 손놀림 — 손가락 · 마우스를 한 코드로. 끌기와 톡을 움직인 거리로 가른다
+  const P = new Map(); let travel = 0, last = null, pinch = 0, tapT = 0, tapAt = null;
+  const dist = () => { const v = [...P.values()]; return Math.hypot(v[0].x - v[1].x, v[0].y - v[1].y); };
+  const mid = () => { const v = [...P.values()]; return { x: (v[0].x + v[1].x) / 2, y: (v[0].y + v[1].y) / 2 }; };
+  deep.addEventListener('pointerdown', e => {
+    if (e.target.closest('.deep-x')) return;
+    if (!P.size) travel = 0;
+    P.set(e.pointerId, { x: e.clientX, y: e.clientY }); last = { x: e.clientX, y: e.clientY };
+    if (P.size === 2) pinch = dist();
+    deep.classList.add('drag'); try { deep.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+  deep.addEventListener('pointermove', e => {
+    if (!P.has(e.pointerId)) return;
+    P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (P.size === 2 && pinch) { const d = dist(), c = mid(); travel += 99; zoomAt(d / pinch, c.x, c.y); pinch = d; return; }
+    if (!last) return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    travel += Math.abs(dx) + Math.abs(dy); last = { x: e.clientX, y: e.clientY };
+    if (Z.s > 1.001) { Z.tx += dx; Z.ty += dy; frame(); }
+  });
+  const up = e => {
+    if (!P.has(e.pointerId)) return;
+    P.delete(e.pointerId); if (P.size < 2) pinch = 0;
+    if (P.size) { last = [...P.values()][0]; return; }   // 벌리던 손가락 하나를 떼면 남은 손가락으로 계속 끈다
+    deep.classList.remove('drag'); last = null;
+    if (travel >= 8 || e.type === 'pointercancel') return;
+    // 톡 두 번 = 키우기 · 맞춤 / 톡 한 번(키우지 않았을 때) = 해설로
+    const x = e.clientX, y = e.clientY;
+    if (tapT && tapAt && Math.hypot(x - tapAt.x, y - tapAt.y) < 40) {
+      clearTimeout(tapT); tapT = 0; tapAt = null; glide();
+      if (Z.s > 1.001) { Z.s = 1; frame(); } else zoomAt(2.5, x, y);
+      return;
+    }
+    tapAt = { x, y }; clearTimeout(tapT);
+    tapT = setTimeout(() => { tapT = 0; tapAt = null; if (Z.s <= 1.001) askCloseDeep(); }, 300);
+  };
+  deep.addEventListener('pointerup', up);
+  deep.addEventListener('pointercancel', up);
 
   wallEl.addEventListener('click', e => {
     const b = e.target.closest('button.slot'); if (!b) return;
@@ -282,7 +385,7 @@
   });
   zoom.querySelector('.zoom-x').addEventListener('click', askClose);
   document.getElementById('backWall').addEventListener('click', askClose);
-  addEventListener('keydown', e => { if (e.key === 'Escape') askClose(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape') { if (deepOpen) askCloseDeep(); else askClose(); } });
 
   /* ── 화면 3 · 도장(시연판은 엽서만) ── */
   let visionP = null;
